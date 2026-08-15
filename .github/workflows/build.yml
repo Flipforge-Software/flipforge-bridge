@@ -1,0 +1,70 @@
+name: Build firmware
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libssl-dev
+      - name: Run host protocol tests
+        run: make test
+
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ESP32-S2 firmware
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.5
+          target: esp32s2
+          path: .
+          command: idf.py set-target esp32s2 && idf.py build
+      - name: Package firmware and checksums
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/package_firmware.sh build dist
+          version="$(sed -n 's/^#define FLIPFORGE_BRIDGE_VERSION "\([^"]*\)"/\1/p' main/bridge_config.h)"
+          test -n "${version}"
+          archive="flipforge-bridge-${version}.tar.gz"
+          tar -C dist -czf "${RUNNER_TEMP}/${archive}" \
+            bootloader partition_table flipforge_bridge.bin flipforge_bridge.elf \
+            flash_args flasher_args.json SHA256SUMS
+          mv "${RUNNER_TEMP}/${archive}" "dist/${archive}"
+          (cd dist && sha256sum "${archive}" > "${archive}.sha256")
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "archive=${archive}" >> "${GITHUB_OUTPUT}"
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: flipforge-bridge-${{ github.ref_name }}
+          path: dist/
+          if-no-files-found: error
+
+      - name: Verify release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test "${GITHUB_REF_NAME}" = "v${{ steps.package.outputs.version }}"
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "dist/${{ steps.package.outputs.archive }}" \
+            "dist/${{ steps.package.outputs.archive }}.sha256" \
+            --verify-tag \
+            --generate-notes \
+            --title "Flipforge Bridge ${{ steps.package.outputs.version }}"

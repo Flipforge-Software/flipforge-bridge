@@ -1,0 +1,18 @@
+menu "Flipforge Bridge"
+
+config FLIPFORGE_ACTIVITY_LED
+    bool "Flash onboard RGB LED for RPC data"
+    default y
+    help
+        Pulse the official Wi-Fi Devboard's blue LED when actual RPC payload
+        bytes move between the Flipper and the Wi-Fi client. Heartbeats and
+        status frames do not trigger the LED.
+
+config FLIPFORGE_DEBUG_METRICS
+    bool "Enable DEBUG transport metrics"
+    default n
+    help
+        Collect byte counts, frame counts, ACK timing, queue utilization,
+        retries, and protocol errors. Metrics never include RPC payloads.
+
+endmenu

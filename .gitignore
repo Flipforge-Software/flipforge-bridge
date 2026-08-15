@@ -53,3 +53,18 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# ESP-IDF
+build/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+managed_components/
+
+# Host tests and release output
+tests/build/
+dist/
+__pycache__/
+*.pyc
+.DS_Store
+tmp/
